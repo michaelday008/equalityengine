@@ -1,0 +1,19 @@
+<?php
+include('header.php');
+?>
+<h1>Equality Engine</h1>
+<h2>About</h2>
+<p>The equality engine is an open source implementation of the equality system, a resource based socio-economic system designed to ensure a fair and equal distribution of rights, privileges, and benefits to all members.</p>
+<h2>Status</h2>
+<p>The Equality Engine is still in early alpha development.</p>
+<h2>Roadmap</h2>
+<p>The following items are on the current roadmap</p>
+<ul>
+<li>Voting - including unique tokens for each vote to make it more difficult to obtain a voters identity by compromising a table containing votes</li>
+<li>A city database</li>
+<li>A database structure that defines business templates including what resources a business needs to operate - including scaling factors</li>
+<li>Database encryption of all personal information fields</li>
+</ul>
+<?php
+include('footer.php');
+?>

@@ -1,0 +1,61 @@
+<?php
+include('header.php');
+
+/* FUNCTIONS */
+
+function print_default_page(&$inputs = null, &$errors = null) {
+?>
+<h1>Email Verification</h1>
+<?php
+	if ($inputs == null) {
+		initialize_inputs($inputs, array('token'));
+	}
+	$email_updated = false;
+
+	if ($stmt = $GLOBALS['conn']->prepare("SELECT ID FROM ee_members WHERE verifying_token = ?;")) {
+		$stmt->bind_param('s', $inputs['token']);
+		$stmt->execute();
+		$stmt->bind_result($userid);
+		if ($stmt->fetch()) {
+			$stmt->close();
+			$token_match = true;
+		} else {
+			$token_match = false;
+		}
+	}
+	//var_dump($token_match);
+	if ($token_match) {
+		if ($stmt = $GLOBALS['conn']->prepare("UPDATE ee_members SET email = verifying_email, email_verified = 1, verifying_token = '' WHERE verifying_token = ?;")) {
+			$stmt->bind_param('s', $inputs['token']);
+			if ($stmt->execute()) {
+				if ($stmt->affected_rows == 1) {
+					$email_updated = true;
+				}
+				$stmt->close();
+			} else {
+				print $GLOBALS['conn']->error;
+			}
+		} else {
+			print $GLOBALS['conn']->error;
+		}	
+	}
+	if ($token_match == true && $email_updated == true)	{
+?>	
+<p>Your email address was successfully verified.</p>
+<?php
+	} else {
+?>	
+<p>There was an issue verifying your email address.</p>
+<?php
+	}
+}
+
+
+/* PROGRAM STARTS HERE */
+
+print_default_page();
+
+
+	
+include('footer.php');
+?>

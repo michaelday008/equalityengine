@@ -1,0 +1,158 @@
+<?php
+include('header.php');
+
+/* FUNCTIONS */
+
+function print_default_page(&$inputs = null, &$errors = null) {
+	
+	if ($inputs == null) {
+		initialize_inputs($inputs, array('user_name', 'user_password1', 'user_password2', 'user_email_address'));
+	}
+	if ($errors == null) {
+		$errors = array();
+	}
+?>	
+<p>To sign up for an account, fill out the form below.  Fields with a star beside them are required</p>
+<form action='/signup.php' method='post'>
+<input type='hidden' name='action' value='page_2'>
+Username: <input type='text' name='user_name' value='<?php print $inputs['user_name']; ?>'>
+<?php
+	if (array_search('user_name', $errors) !== false) {
+?>
+<div style='display:inline;background-color:red;'>That name is not valid or is already taken.</div>
+<?php
+	}
+?>
+<br>Password: <input type='password' name='user_password1' value='<?php print $inputs['user_password1']; ?>'>
+<?php
+	if (array_search('user_password1', $errors) !== false) {
+?>
+<div style='display:inline;background-color:red;'>The passwords do not match</div>
+<?php
+	}
+?>
+<br>Repeat Password: <input type='password' name='user_password2' value='<?php print $inputs['user_password2']; ?>'>
+<?php
+	if (array_search('user_password2', $errors) !== false) {
+?>
+<div style='display:inline;background-color:red;'>The passwords do not match</div>
+<?php
+	}
+?>
+<br><input type='submit' value='Submit'>
+</form>
+<?php
+}
+
+function confirm_user() {
+	
+	$inputs = array();
+	$errors = array();
+	$user_exists = false;
+	$password_match = false;
+	initialize_inputs($inputs, array('user_name', 'user_password1', 'user_password2'));
+	
+	if ($inputs['user_password1'] != $inputs['user_password2']) {
+		array_push($errors, 'user_password1');
+		array_push($errors, 'user_password2');
+	} else {
+		$password_match = true;
+	}
+
+	// check for admin username exists
+	$result_count = 0;
+	if ($stmt = $GLOBALS['conn']->prepare("SELECT COUNT(*) AS admincount FROM ee_members WHERE username = ?")) {
+		$stmt->bind_param('s', $inputs['user_name']);
+		$stmt->execute();
+		$stmt->bind_result($num_results);
+		while ($stmt->fetch()) {
+			$result_count += $num_results;
+		}
+		$stmt->close();
+	}
+	if ($result_count > 0) {
+		array_push($errors, 'user_name');
+		$user_exists = true;
+	}
+	
+	if ($user_exists == false && $password_match == true) {
+		add_user($inputs);
+	} else {
+		print_default_page($inputs, $errors);
+	}
+	
+}
+
+function check_for_user($user_name) {
+	$returnresult = false;
+	if ($stmt = $GLOBALS['conn']->prepare("SELECT count(*) as usercount FROM ee_members WHERE username = ?")) {
+		$stmt->bind_param('s', $user_name);
+		$stmt->execute();
+		$stmt->bind_result($usercount);
+		$stmt->fetch();
+		if ($usercount == 1) {
+			$returnresult = true;
+		} else {
+			$returnresult = false;
+		}
+	}
+	//$result->close();
+	return $returnresult;
+}
+
+function add_user (&$inputs = null) {
+
+	if ($inputs == null) {
+		$inputs = array();
+		initialize_inputs($inputs, array('user_name', 'user_password1', 'user_password2'));
+	}
+
+	$account_created = false;
+	$passwordhash = getpasswordhash($inputs['user_password1']);
+	
+	if (check_for_user($inputs['user_name']) == false) {
+
+		if ($stmt = $GLOBALS['conn']->prepare("INSERT INTO ee_members(username, passwordhash, siteadmin) VALUES(?, ?, 0)")) {
+			$stmt->bind_param('ss', $inputs['user_name'], $passwordhash);
+			$stmt->execute();
+			if ($stmt->affected_rows == 1) {
+				$account_created = true;
+			}
+			$stmt->close();
+		}
+	}
+
+	if ($account_created == true) {
+		print "The account was successfully created.<br>\n";
+	} else {
+		print "That username is taken.<br>\n";
+	}
+	print "Press Next to Continue.<br>";
+	print "<form action='/' method='post'>\n";
+	print "<input type='submit' value='Next'>\n";
+	print "</form>\n";
+}
+
+function page_2() {
+	confirm_user();
+}
+
+/* PROGRAM STARTS HERE */
+
+$script_action = '';
+
+if (isset($_POST['action'])) {
+	$script_action = $_POST['action'];
+}
+
+switch ($script_action) {
+	case 'page_2':
+		page_2();
+		break;
+	default:
+		print_default_page();
+}
+
+	
+include('footer.php');
+?>

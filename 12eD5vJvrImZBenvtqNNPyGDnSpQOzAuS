@@ -1,0 +1,580 @@
+<?php
+$GLOBALS['page_permission'] = 'logged_in';
+
+include('header.php');
+
+/* FUNCTIONS */
+
+function print_default_page(&$inputs = null, &$errors = null) {
+?>
+<h1>Profile</h1>
+<?php
+	if ($stmt = $GLOBALS['conn']->prepare("SELECT ee_members.email,
+												  ee_members.username,
+												  ee_members.siteadmin,
+												  ee_members.country_2,
+												  ee_members.subdivision_code,
+												  ee_members.un_locode,
+												  system_country.country_name,
+												  system_subdivision.subdivision_name,
+												  system_city.city_name
+										   FROM ee_members, system_country, system_subdivision, system_city
+										   WHERE ee_members.country_2 = system_country.alpha_2
+										   AND ee_members.subdivision_code = system_subdivision.subdivision_code
+										   AND system_subdivision.default_display = 1
+										   AND ee_members.un_locode = system_city.un_locode
+										   AND ee_members.ID = ?")) {
+		$stmt->bind_param('i', $_SESSION['userid']);
+		$stmt->execute();
+		$stmt->bind_result($email, $username, $siteadmin, $country_2, $subdivision_code, $un_locode, $country_name, $subdivision_name, $city_name);
+		if ($stmt->fetch()) {
+			$stmt->close();
+		}
+	} else {
+		print $GLOBALS['conn']->error;
+	}
+?>	
+<p>Your profile information is listed below.</p>
+<h2>Account</h2>
+<p>Username: <?php print $username; ?></p>
+<h2>Email</h2>
+<form action='/profile.php' method='post'>
+<input type='hidden' name='action' value='change_email_form'>
+<input type='submit' value='Update Email Address'>
+</form>
+<p>Email Address: <?php print $email; ?></p>
+<h2>Address</h2>
+<form action='/profile.php' method='post'>
+<input type='hidden' name='action' value='edit_address'>
+<input type='submit' value='Edit Address'>
+</form>
+<p>Country: <?php print $country_name; ?></p>
+<p>Region: <?php print $subdivision_name; ?></p>
+<p>City: <?php print $city_name; ?></p>
+<h2>Password</h2>
+<form action='/profile.php' method='post'>
+<input type='hidden' name='action' value='change_password_form'>
+<input type='submit' value='Change Password'>
+</form>
+<p>Password: ********</p>
+<?php
+}
+
+function edit_address(&$inputs = null, &$errors = null) {
+?>
+<h1>Edit Address</h1>
+<script type='text/javascript'>
+function refresh_form() {
+	document.getElementById('form_action').value='edit_address'; 
+	document.getElementById('main_form').submit();
+}
+</script>
+<?php	
+	if ($stmt = $GLOBALS['conn']->prepare("SELECT country_2, subdivision_code, un_locode FROM ee_members WHERE ID = ?")) {
+		$stmt->bind_param('i', $_SESSION['userid']);
+		$stmt->execute();
+		$stmt->bind_result($db_country_2, $db_subdivision_code, $db_un_locode);
+		$stmt->fetch();
+		$stmt->close();
+	}
+	if ($inputs == null) {
+		initialize_inputs($inputs, array('country_2', 'subdivision_code', 'un_locode'));
+	}
+	if ($errors == null) {
+		$errors = array();
+	}
+?>
+<p>Fields with a star beside them are required</p>
+<form action='/profile.php' method='post' id='main_form'>
+<input type='hidden' name='action' value='save_address' id='form_action'>
+<p>Country: <select name='country_2' onchange='refresh_form();'>
+<?php
+	$winning_country = $db_country_2;
+	if ($inputs['country_2'] != '') {
+		$winning_country = $inputs['country_2'];
+	}
+	$option_array = array();
+	array_push($option_array, array('' => '[Choose a Country]'));
+	if ($stmt = $GLOBALS['conn']->prepare("SELECT country_name, alpha_2 FROM system_country ORDER BY country_name ASC")) {
+		$stmt->execute();
+		$stmt->bind_result($country_name, $alpha_2);
+		while ($stmt->fetch()) {
+			array_push($option_array, array($alpha_2 => $country_name));
+		}
+		$stmt->close();
+	} else {
+		print $GLOBALS['conn']->error;
+	}
+	foreach ($option_array as $option_pair) {
+		print "<option value='".key($option_pair)."'";
+		if (key($option_pair) == $winning_country) {
+			print " selected";
+		}
+		print ">".$option_pair[key($option_pair)]."</option>\n";
+	}	
+?>
+</select>
+</p>
+<p>Region: <select name='subdivision_code' onchange='refresh_form();'>
+<?php
+	$winning_subdivision_code = $db_subdivision_code;
+	if ($inputs['subdivision_code'] != '') {
+		$winning_subdivision_code = $inputs['subdivision_code'];
+	}
+	$option_array = array();
+	array_push($option_array, array('' => '[Choose a Region]'));
+	if ($winning_country != '') {
+		if ($stmt = $GLOBALS['conn']->prepare("SELECT subdivision_code, subdivision_name FROM system_subdivision WHERE LEFT(subdivision_code, 2) = '".$winning_country."' AND default_display = 1 ORDER BY subdivision_code ASC")) {
+			$stmt->execute();
+			$stmt->bind_result($subdivision_code, $subdivision_name);
+			while ($stmt->fetch()) {
+				array_push($option_array, array($subdivision_code => $subdivision_name));
+			}
+			$stmt->close();
+		} else {
+			print $GLOBALS['conn']->error;
+		}
+	}
+	foreach ($option_array as $option_pair) {
+		print "<option value='".key($option_pair)."'";
+		if (key($option_pair) == $winning_subdivision_code) {
+			print " selected";
+		}
+		print ">".$option_pair[key($option_pair)]."</option>\n";
+	}
+?>
+</select>
+<?php
+	if (array_search('user_password1', $errors) !== false) {
+?>
+<div style='display:inline;background-color:red;'>The Region does not match the country</div>
+<?php
+	}
+?>
+</p>
+<p>City: <select name='un_locode'>
+<?php
+	$winning_un_locode = $inputs['un_locode'];
+	$option_array = array();
+	array_push($option_array, array('' => '[Choose a City]'));
+	if ($winning_subdivision_code != '') {
+		$sql_query = "SELECT un_locode, city_name FROM system_city WHERE subdivision_code = '".substr($winning_subdivision_code, 3)."' AND LEFT(un_locode, 2) = '".$winning_country."' ORDER BY city_name ASC";
+		print $sql_query;
+		if ($stmt = $GLOBALS['conn']->prepare($sql_query)) {
+			print "we are there";
+			$stmt->execute();
+			$stmt->bind_result($un_locode, $city_name);
+			while ($stmt->fetch()) {
+				print "loop";
+				array_push($option_array, array($un_locode => $city_name));
+			}
+			$stmt->close();
+		} else {
+			print $GLOBALS['conn']->error;
+		}
+	}
+	foreach ($option_array as $option_pair) {
+		print "<option value='".key($option_pair)."'";
+		if (key($option_pair) == $winning_un_locode) {
+			print " selected";
+		}
+		print ">".$option_pair[key($option_pair)]."</option>\n";
+	}
+
+?>
+</select>
+<?php
+	if (array_search('user_password1', $errors) !== false) {
+?>
+<div style='display:inline;background-color:red;'>The City does not match the region</div>
+<?php
+	}
+?>
+</p>
+<input type='submit' value='Submit'>
+</form>
+<?php
+}
+
+function change_password_form(&$inputs = null, &$errors = null) {
+?>
+<h1>Change Password</h1>
+<?	
+	if ($inputs == null) {
+		initialize_inputs($inputs, array('current_password', 'user_password1', 'user_password2'));
+	}
+	if ($errors == null) {
+		$errors = array();
+	}
+?>	
+<p>Fields with a star beside them are required</p>
+<form action='/profile.php' method='post'>
+<input type='hidden' name='action' value='save_password'>
+<p>Current Password: <input type='password' name='current_password' value='<?php print $inputs['current_password']; ?>'>
+<?php
+	if (array_search('current_password', $errors) !== false) {
+?>
+<div style='display:inline;background-color:red;'>Your current password was not correct.</div>
+<?php
+	}
+?>
+</p>
+<p>New Password: <input type='password' name='user_password1' value='<?php print $inputs['user_password1']; ?>'>
+<?php
+	if (array_search('user_password1', $errors) !== false) {
+?>
+<div style='display:inline;background-color:red;'>The passwords do not match</div>
+<?php
+	}
+	if (array_search('password_length', $errors) !== false) {
+?>
+<div style='display:inline;background-color:red;'>The new password is too short</div>
+<?php
+	}
+?>
+</p>
+<p>Repeat New Password: <input type='password' name='user_password2' value='<?php print $inputs['user_password2']; ?>'>
+<?php
+	if (array_search('user_password2', $errors) !== false) {
+?>
+<div style='display:inline;background-color:red;'>The passwords do not match</div>
+<?php
+	}
+?>
+</p><input type='submit' value='Submit'>
+</form>
+<?php
+}
+
+function change_email_form(&$inputs = null, &$errors = null) {
+?>
+<h1>Change Email Address</h1>
+<?php	
+	if ($stmt = $GLOBALS['conn']->prepare("SELECT email FROM ee_members WHERE ID = ?")) {
+		$stmt->bind_param('i', $_SESSION['userid']);
+		$stmt->execute();
+		$stmt->bind_result($db_email);
+		$stmt->fetch();
+		$stmt->close();
+	}
+	if ($inputs == null) {
+		initialize_inputs($inputs, array('email'));
+	}
+	if ($errors == null) {
+		$errors = array();
+	}
+	$winning_email = $db_email;
+	if ($inputs['email'] != '') {
+		$winning_email = $inputs['email'];
+	}
+	
+	
+?>
+<p>Fields with a star beside them are required</p>
+<form action='/profile.php' method='post'>
+<input type='hidden' name='action' value='save_email'>
+<p>Email Address: <input type='text' name='email' size=40 maxlength=64 value='<?php print $winning_email; ?>'>
+<?php
+	if (array_search('email_exists', $errors) !== false) {
+?>
+<div style='display:inline;background-color:red;'>That email address is already in use.</div>
+<?php
+	}
+	if (array_search('invalid_email', $errors) !== false) {
+?>
+<div style='display:inline;background-color:red;'>Please enter an email address in a valid format such as username@somedomain.com</div>
+<?php
+	}	
+?>
+</p>
+<input type='submit' value='Submit'>
+</form>
+<?php
+}
+
+function confirm_email() {
+	// We can do any validation we want here before saving or displaying the page again
+	
+	$inputs = array();
+	$errors = array();
+	$email_format_ok = false;
+	initialize_inputs($inputs, array('email'));
+
+	// check if the email already exists in the database
+	$email_exists = check_for_email($inputs['email']);
+	if ($email_exists == true) {
+		array_push($errors, 'email_exists');
+	}
+	
+	// check if the email is in a valid format
+	if (preg_match('/^(?!(?:(?:\x22?\x5C[\x00-\x7E]\x22?)|(?:\x22?[^\x5C\x22]\x22?)){255,})(?!(?:(?:\x22?\x5C[\x00-\x7E]\x22?)|(?:\x22?[^\x5C\x22]\x22?)){65,}@)(?:(?:[\x21\x23-\x27\x2A\x2B\x2D\x2F-\x39\x3D\x3F\x5E-\x7E]+)|(?:\x22(?:[\x01-\x08\x0B\x0C\x0E-\x1F\x21\x23-\x5B\x5D-\x7F]|(?:\x5C[\x00-\x7F]))*\x22))(?:\.(?:(?:[\x21\x23-\x27\x2A\x2B\x2D\x2F-\x39\x3D\x3F\x5E-\x7E]+)|(?:\x22(?:[\x01-\x08\x0B\x0C\x0E-\x1F\x21\x23-\x5B\x5D-\x7F]|(?:\x5C[\x00-\x7F]))*\x22)))*@(?:(?:(?!.*[^.]{64,})(?:(?:(?:xn--)?[a-z0-9]+(?:-[a-z0-9]+)*\.){1,126}){1,}(?:(?:[a-z][a-z0-9]*)|(?:(?:xn--)[a-z0-9]+))(?:-[a-z0-9]+)*)|(?:\[(?:(?:IPv6:(?:(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){7})|(?:(?!(?:.*[a-f0-9][:\]]){7,})(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,5})?::(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,5})?)))|(?:(?:IPv6:(?:(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){5}:)|(?:(?!(?:.*[a-f0-9]:){5,})(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,3})?::(?:[a-f0-9]{1,4}(?::[a-f0-9]{1,4}){0,3}:)?)))?(?:(?:25[0-5])|(?:2[0-4][0-9])|(?:1[0-9]{2})|(?:[1-9]?[0-9]))(?:\.(?:(?:25[0-5])|(?:2[0-4][0-9])|(?:1[0-9]{2})|(?:[1-9]?[0-9]))){3}))\]))$/iD', $inputs['email'])) {
+		$email_format_ok = true;
+	}
+	
+	if ($email_exists != true && $email_format_ok == true) {
+		save_email($inputs);
+	} else {
+		print_default_page($inputs, $errors);
+	}
+}
+
+function confirm_address() {
+	// We can do any validation we want here before saving or displaying the page again
+	
+	$inputs = array();
+	$errors = array();
+	$country_code_exists = true;
+	initialize_inputs($inputs, array('country_2', 'subdivision_code', 'un_locode'));
+	
+	// check for country code sent exists in the database
+	/*
+	$result_count = 0;
+	if ($stmt = $GLOBALS['conn']->prepare("SELECT COUNT(*) AS admincount FROM ee_members WHERE username = ?")) {
+		$stmt->bind_param('s', $inputs['user_name']);
+		$stmt->execute();
+		$stmt->bind_result($num_results);
+		while ($stmt->fetch()) {
+			$result_count += $num_results;
+		}
+		$stmt->close();
+	}
+	if ($result_count == 0) {
+		array_push($errors, 'invalid_country_code');
+		$country_code_exists = true;
+	} else {
+		$country_code_exists = true;
+	}
+	*/
+	
+	if ($country_code_exists == true) {
+		save_address($inputs);
+	} else {
+		print_default_page($inputs, $errors);
+	}
+}
+
+function confirm_password() {
+	
+	$inputs = array();
+	$errors = array();
+	$user_exists = false;
+	$new_password_match = false;
+	$current_password_match = false;
+	$minimum_password_length = 8;
+	$password_length_ok = false;
+	initialize_inputs($inputs, array('current_password', 'user_password1', 'user_password2'));
+	
+	// verify the new passwords match
+	if ($inputs['user_password1'] != $inputs['user_password2']) {
+		array_push($errors, 'user_password1');
+		array_push($errors, 'user_password2');
+	} else {
+		$new_password_match = true;
+	}
+	
+	if (strlen($inputs['user_password1']) >= $minimum_password_length && strlen($inputs['user_password2']) >= $minimum_password_length) {
+		$password_length_ok = true;
+	} else {
+		array_push($errors, 'password_length');
+	}
+
+	// verify the current password matches the hashed one on file
+	if ($stmt = $GLOBALS['conn']->prepare("SELECT passwordhash FROM ee_members WHERE ID = ?")) {
+		$stmt->bind_param('i', $_SESSION['userid']);
+		$stmt->execute();
+		$stmt->bind_result($passwordhash);
+		$stmt->fetch();
+		if (password_verify($inputs['current_password'], $passwordhash)) {
+			$current_password_match = true;
+		} else {
+			array_push($errors, 'current_password');
+		}
+		$stmt->close();
+	} else {
+		print $GLOBALS['conn']->error;
+		exit;
+	}
+
+	if ($current_password_match == true && $new_password_match == true && $password_length_ok == true) {
+		save_password($inputs);
+	} else {
+		change_password_form($inputs, $errors);
+	}
+	
+}
+
+function check_for_email($email_address) {
+	// check if the email address is already in use by another account
+	$returnresult = false;
+	if ($stmt = $GLOBALS['conn']->prepare("SELECT count(*) as emailcount FROM ee_members WHERE email = ? OR verify_email = ?")) {
+		$stmt->bind_param('ss', $email, $email);
+		$stmt->execute();
+		$stmt->bind_result($emailcount);
+		$stmt->fetch();
+		if ($emailcount == 1) {
+			$returnresult = true;
+		} else {
+			$returnresult = false;
+		}
+	}
+	//$result->close();
+	return $returnresult;
+}
+
+function save_password(&$inputs = null) {
+?>
+<h1>Change Password</h1>
+<?php
+	if ($inputs == null) {
+		$inputs = array();
+		initialize_inputs($inputs, array('current_password', 'user_password1', 'user_password2'));
+	}
+
+	$password_saved = false;
+	$passwordhash = getpasswordhash($inputs['user_password1']);
+	
+	if ($stmt = $GLOBALS['conn']->prepare("UPDATE ee_members SET passwordhash = ? WHERE ID = ?;")) {
+		$stmt->bind_param('si', $passwordhash, $_SESSION['userid']);
+		$stmt->execute();
+		if ($stmt->affected_rows == 1) {
+			$password_saved = true;
+		}
+		$stmt->close();
+	}
+
+	if ($password_saved == true) {
+		print "The new password was successfully saved.<br>\n";
+	} else {
+		print "There was an error saving the password.<br>\n";
+	}
+	print "Press Next to return to your profile.<br>";
+	print "<form action='/profile.php' method='post'>\n";
+	print "<input type='submit' value='Next'>\n";
+	print "</form>\n";
+}
+
+function save_address (&$inputs = null) {
+?>
+<h1>Save Address</h1>
+<?php
+	if ($inputs == null) {
+		$inputs = array();
+		initialize_inputs($inputs, array('country_2', 'subdivision_code', 'un_locode'));
+	}
+
+	$address_saved = false;
+	
+	if ($stmt = $GLOBALS['conn']->prepare("UPDATE ee_members SET country_2 = ?, subdivision_code = ?, un_locode = ? WHERE ID = ?;")) {
+		$stmt->bind_param('sssi', $inputs['country_2'], $inputs['subdivision_code'], $inputs['un_locode'], $_SESSION['userid']);
+		$stmt->execute();
+		if ($stmt->affected_rows == 1) {
+			$address_saved = true;
+		}
+		$stmt->close();
+	} else {
+		print $GLOBALS['conn']->error;
+	}
+
+	if ($address_saved == true) {
+		print "The address was successfully saved.<br>\n";
+	} else {
+		print "There was an error saving the address.<br>\n";
+	}
+	print "Press Next to return to the profile page.<br>";
+	print "<form action='/profile.php' method='post'>\n";
+	print "<input type='submit' value='Next'>\n";
+	print "</form>\n";
+}
+
+function save_email (&$inputs = null) {
+?>
+<h1>Change Email Address</h1>
+<?php
+	if ($inputs == null) {
+		$inputs = array();
+		initialize_inputs($inputs, array('email'));
+	}
+
+	$email_saved = false;
+	$verify_email_sent = false;
+	$verification_token = md5(uniqid($inputs['email'], true));
+
+	if ($stmt = $GLOBALS['conn']->prepare("UPDATE ee_members SET verifying_email = ?, verifying_token = ? WHERE ID = ?;")) {
+		$stmt->bind_param('ssi', $inputs['email'], $verification_token, $_SESSION['userid']);
+		$stmt->execute();
+		if ($stmt->affected_rows == 1) {
+			$address_saved = true;
+		}
+		$stmt->close();
+	}
+
+	$subject = 'Email Verification Required';
+	$message = 'You must verify your email address to access '.$_SERVER['SERVER_NAME']."\r\n";
+	$message .= 'Please copy and paste the following URL into your browser:'."\r\n";
+	$message .= $_SERVER['SERVER_NAME'].'/verifyemail.php?token='.$verification_token."\r\n";
+	$headers = 'From: eqengine@equalityengine.nathanpeters.com';
+	if (mail($inputs['email'], $subject, $message, $headers)) {
+		$verify_email_sent = true;
+	}
+
+	if ($address_saved == true) {
+?>
+<p>The address was successfully saved.</p>
+<?php
+	} else {
+?>
+<p>There was an error saving the address.</p>
+<?php
+	}
+	if ($verify_email_sent == true) {
+?>
+<p>The verification email has been sent.  You will need to open the URL contained in the email to finish activation of your new email address.  Until you do, your old email will show on your profile page.</p>
+<?php
+	} else {
+?>
+<p>There was an error sending the verification email.</p>
+<?php
+	}
+?>
+<p>Press Next to return to the profile page.</p>
+<form action='/profile.php' method='post'>
+<input type='submit' value='Next'>
+</form>
+<?php
+}
+
+
+/* PROGRAM STARTS HERE */
+
+$script_action = '';
+
+if (isset($_POST['action'])) {
+	$script_action = $_POST['action'];
+}
+
+switch ($script_action) {
+	case 'change_email_form':
+		change_email_form();
+		break;
+	case 'save_email':
+		confirm_email();
+		break;
+	case 'change_password_form':
+		change_password_form();
+		break;
+	case 'save_password':
+		confirm_password();
+		break;
+	case 'edit_address':
+		edit_address();
+		break;
+	case 'save_address':
+		confirm_address();
+		break;
+	default:
+		print_default_page();
+}
+
+	
+include('footer.php');
+?>

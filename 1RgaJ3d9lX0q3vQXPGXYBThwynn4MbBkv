@@ -1,0 +1,35 @@
+# equalityengine
+The equality engine is an open source implementation of the equality system, a resource based socio-economic system designed to ensure a fair and equal distribution of rights, privileges, and benefits to all members.
+
+Installation Instructions
+=========================
+1. Install these files on a web server and point the site to the www directory.
+2. Browse to the site and follow directions in the database and user setup wizards that appear to complete database configuration and initial administrative user setup.
+
+Version History
+===============
+
+July 30, 2016 - Build 3 - Version 0.3a
+--------------------------------------
+-A subdivision list has been added to the system settings menu
+-The subdivision list can import an ISO-3166-2 subdivision code list from the internet to populate itself
+-A profile page has been added where users can update their email address, country, subdivision, and password.  The countries and subdivisions that users can choose from are populated from the system tables.
+-The email address update features randomized token based email verification.  You must copy and paste the link from the email in order to activate the address
+-The initialize_inputs() function has been updated to strip all html tags from GET and POST input by default to help protect against malicious javascript insertion into usernames or other fields when creating or updating account details
+
+July 28, 2016 - Build 2 - Version 0.2a
+--------------------------------------
+-Administration menu has been added and is only visible to logged in users with the siteadmin flag set to 1
+-Administrator can now view site user list from the administration menu
+-Database configuration file format changed.  SQL table and column creation statements will now be individually evaluated which allows removing the prepared statements and displaying more accurate information about what was actually run when a database update is performed.
+-Database repair and update can now be performed while logged in from the administration menu and is no longer restricted to the site setup phase.  This should allow for easy in-place upgrades of the database without the need to remove the dbconfig.xml to trigger a site setup wizard.
+-A country list has been added to the administration menu
+-The country list can import an ISO-3166-1 country code list from the internet to populate itself
+
+
+July 21, 2016 - Build 1 - Version 0.1a
+--------------------------------------
+-Site will configure itself with a database connection file based on parameters that a user provides.
+-Site will detect lack of an administrative user and allow the creation of one
+-Site will accept sign-ups from new users
+-Users can log in and log out of the site

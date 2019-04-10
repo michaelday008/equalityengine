@@ -1,0 +1,8 @@
+<?php
+include('header.php');
+?>
+<h1>Restricted</h1>
+<p>You have attempted to access a restricted page.  Please login <a href='/login.php'>here</a>.
+<?php
+include('footer.php');
+?>

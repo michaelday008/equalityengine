@@ -1,0 +1,80 @@
+<?php
+include('header.php');
+
+/* FUNCTIONS */
+
+function print_default_page(&$inputs = null, &$errors = null) {
+	
+	if ($inputs == null) {
+		initialize_inputs($inputs, array('admin_password1', 'admin_password2', 'admin_email_address', 'login_failed'));
+	}
+	
+	print "<p>Please enter your username and password to login</p>\n";
+	print "<form action='/login.php' method='post'>\n";
+	print "<input type='hidden' name='action' value='login'>\n";
+	print "Username:";
+	print "<input type='text' name='username' value='".$inputs['username']."'>\n";
+	if ($login_failed == 'true') {
+		print "<div style='display:inline;background-color:red;'>Your username or password was incorrect.  Please try again</div>";
+	}
+	print "<br>Password:";
+	print "<input type='password' name='password' value='".$inputs['password']."'>\n";
+	print "<br><input type='submit' value='Submit'>\n";
+	print "</form>\n";
+	
+}
+
+function site_login() {
+	
+	$inputs = array();
+	$errors = array();
+	$password_match = false;
+	initialize_inputs($inputs, array('username', 'password'));
+	
+	// check for user exists
+	$result_count = 0;
+	if ($stmt = $GLOBALS['conn']->prepare("SELECT ID, username, passwordhash, siteadmin, email_verified, country_2, subdivision_code, un_locode FROM ee_members WHERE username = ?")) {
+		$stmt->bind_param('s', $inputs['username']);
+		$stmt->execute();
+		$stmt->bind_result($userid, $username, $passwordhash, $siteadmin, $email_verified, $country_2, $subdivision_code, $un_locode);
+		$stmt->fetch();
+		if (password_verify($inputs['password'], $passwordhash)) {
+			$_SESSION['authenticated'] = true;
+			$_SESSION['username'] = $username;
+			$_SESSION['email_verified'] = $email_verified;
+			$_SESSION['userid'] = $userid;
+			$_SESSION['country_2'] = $country_2;
+			$_SESSION['subdivision_code'] = $subdivision_code;
+			$_SESSION['un_locode'] = $un_locode;
+			if ($siteadmin == 1) {
+				$_SESSION['siteadmin'] = true;
+			}
+		}
+		$stmt->close();
+	} else {
+		print $GLOBALS['conn']->error;
+		exit;
+	}
+	
+	if ($_SESSION['authenticated'] == true) {
+		header('Location: /index.php');
+	} else {
+		header('Location: /login.php?login_failed=true');
+	}
+	
+}
+
+
+/* PROGRAM STARTS HERE */
+
+
+switch ($GLOBALS['script_action']) {
+	case 'login':
+		site_login();
+		break;
+	default:
+		print_default_page();
+}
+	
+include('footer.php');
+?>
